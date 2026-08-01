@@ -1,30 +1,32 @@
 {
   "name": "shortcuts-extender",
-  "version": "2.2.0",
-  "description": "Use shortcuts for text formatting or input special symbols without language switching",
+  "version": "3.0.0",
+  "description": "Adds editor commands for markdown formatting and inserting special symbols without switching keyboard layout.",
   "main": "main.js",
   "scripts": {
     "dev": "rollup --config rollup.config.js -w",
     "build": "rollup --config rollup.config.js",
+    "check": "tsc --noEmit",
     "release": "standard-version"
   },
-  "keywords": [],
+  "keywords": [
+    "obsidian",
+    "obsidian-plugin",
+    "markdown",
+    "shortcuts"
+  ],
   "author": "kitchenrunner",
   "license": "MIT",
   "devDependencies": {
-    "@rollup/plugin-commonjs": "^15.1.0",
-    "@rollup/plugin-node-resolve": "^9.0.0",
-    "@rollup/plugin-typescript": "^6.0.0",
-    "@types/node": "^14.14.2",
-    "obsidian": "https://github.com/obsidianmd/obsidian-api/tarball/master",
-    "prettier": "2.1.2",
-    "rollup": "^2.32.1",
-    "standard-version": "^9.0.0",
-    "tslib": "^2.0.3",
-    "typescript": "^4.0.3"
-  },
-  "dependencies": {
-    "supports-color": "^7.2.0"
+    "@rollup/plugin-commonjs": "^28.0.6",
+    "@rollup/plugin-node-resolve": "^16.0.1",
+    "@rollup/plugin-typescript": "^12.1.4",
+    "@types/node": "^20.19.9",
+    "obsidian": "latest",
+    "rollup": "^4.46.2",
+    "standard-version": "^9.5.0",
+    "tslib": "^2.8.1",
+    "typescript": "^5.9.2"
   },
   "repository": {
     "type": "git",

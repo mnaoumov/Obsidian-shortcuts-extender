@@ -1,66 +1,52 @@
-# Obsidian-shortcuts-extender
+# Shortcuts extender
 
-The three key features of the plugin so far are:
-- the ability to change the heading level of the text by pressing the shortcut
-- the ability to clearing the markup of the selected text
-- the ability to assign shortcuts to enter special characters - so that you can fully use the markdown markup if you write notes in a language other than English
+Version 3.0.0 modernizes the plugin structure and keeps the plugin focused on editor commands that are still useful in current Obsidian versions. Hotkeys are no longer forced by default for most commands, because Obsidian already lets users assign them in Settings -> Hotkeys.
 
-## Сhanging the heading level
+## What the plugin does
 
-To change the heading level of the text, just place the cursor on the line whose heading level we want to change.
-Use keyboard shortcuts to specify the heading level:
-- <`Ctrl` + `1`> for heading1
-- <`Ctrl` + `2`> for heading2
-- <...>
-- <`Ctrl` + `6`> for heading6
+This plugin adds editor commands for:
+- inserting special symbols without switching keyboard layout;
+- wrapping selections with common markdown pairs;
+- toggling blockquotes, bullet lists, and code blocks;
+- changing heading depth for the current line or selected lines;
+- toggling selection case;
+- inserting French quotes `«»` or wrapping selected text with them.
 
-## Clearing the markup of the selected text
+## Heading commands
 
-Use `Ctrl` + `0` for clearing the markup of the selected text: only the initial characters of lines are cleared, such as markup characters for headings, numbered and unnumbered lists, quotes.
+The heading commands use the current 3.0.0 logic:
+- `Increase heading level` reduces the number of `#`, so `######` -> `#####` -> ... -> `#` -> plain text;
+- `Decrease heading level` increases the number of `#`, so `#` -> `##` -> ... -> `######` -> plain text;
+- plain text becomes `######` for Increase and `#` for Decrease;
+- lines that start with markdown list markers, checkbox markers, ordered-list markers such as `1.` or `2)`, or other special symbols are left unchanged.
 
-You can in this way both clear the markup in the drain, where the pointer is at the current moment, and clear the markup of lines from all the selected text.
+## Typographic commands
 
-## Toggling code blocks
+The plugin includes commands for:
+- `–` and `—`;
+- `«»` with pair insertion when nothing is selected;
+- square, curly, and angle bracket helpers;
+- inline code and fenced code block helpers.
 
-Use ``Ctrl + ` (Backtick)`` to toggle code blocks. If you select a code block, you can replace the block with just the inner code. If you select code and press ``Ctrl + ` (Backtick)``, then you can create a code block.
+## Hotkeys
 
-## Assigning shortcuts to enter special characters
+This release intentionally avoids shipping most default hotkeys. Assign the commands you want in Obsidian under `Settings -> Hotkeys`.
 
-If you are writing notes in a language other than English, you may need to switch layouts frequently to enter special markdown markup characters. This plugin lets you assign you keyboard shortcuts for the most commonly used special characters.
+## Manual installation
 
-So far, the following keyboard shortcuts have been assigned:
-- `Alt` + `1` - `7` for input `!`, `@`, `#`, `$`, `%`, `^`, `&` symbols
-- `Alt` + cyrillic `х` or `ъ` (or EN `[` and `]`) for input `[``]`
-- `Alt` + `Shift` + cyrillic `х` or `ъ` (or EN `{` and `}`) for input `{``}`
-- `Alt` + cyrillic `б` or `ю` (or EN `,` and `.`) for input `<``>`
-- `Alt` + cyrillic `ё` for input code fences
-- `Alt` + `Shift` + cyrillic `ё` (or EN `~`) for input code fences for python code
-- `Alt` + `Shift` + `\` for input `|` symbol
+1. Open your vault folder.
+2. Go to `.obsidian/plugins/shortcuts-extender/`.
+3. Put `manifest.json` and `main.js` there.
+4. Reload Obsidian and enable the plugin.
 
-If you enter brackets or comparison signs or code fences, having previously selected the text, then the text will be enclosed in brackets (in the case of square brackets, a pair will be put at once)
+## Development
 
-> Notification for mac users:
->
-> Due to mac keyboard have a lot of build-in shortcuts with `Alt` symbol, many shortcuts need to be rechanged. But also mac users don't need part of shortcuts of this plugin for effective work.
-
-## Additional features
-
-If you enter code fences for python code via <`Alt` + `Shift` + `~`> - new strings will added and result will look as:
-
-```py
-<your selected python code>
+```bash
+npm install
+npm run check
+npm run build
 ```
 
-Also, you can use <`Alt` + `-`> for creating list from selected text.
+## Notes for release
 
-If the selected text was already a list, the list level will increase by 1, as if you had entered a tab in front of each list item.
-
-
-## Install notes
-
-You can install the plugin via the Community Plugins tab within Obsidian.
-For manual installation place the files `manifest.json` and `main.js` in your `<vault>/.obsidian/plugins/` folder.
-
-## Suggestions for improvement
-
-You can open the [Issue on GitHub page](https://github.com/ryjjin/Obsidian-shortcuts-extender/issues) or contact me on [Obsidian Discord Server](https://discord.com/?utm_source=Discord%20Widget&utm_medium=Logo) via @kitchenrunner
+For Community Plugins releases, the release asset should contain only `manifest.json`, `main.js`, and `styles.css` if the plugin uses styles. This plugin currently does not require `styles.css`.

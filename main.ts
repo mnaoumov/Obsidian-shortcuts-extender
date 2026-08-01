@@ -1,711 +1,369 @@
-import { MarkdownView, Plugin, EditorSelection, Editor } from "obsidian";
+import { Editor, Plugin } from "obsidian";
 
-export default class shortcutsExtender extends Plugin {
-  async onload() {
-    console.log(this.app);
+// Полный диапазон строк, с которым работают многострочные команды.
+//
+// Зачем это нужно:
+// - многие markdown-команды логичнее применять не к отдельным символам,
+//   а к строкам целиком;
+// - если пользователь выделил несколько строк, нам удобно один раз получить
+//   диапазон "от начала первой строки до конца последней", а дальше уже
+//   работать с этим диапазоном как с единым блоком текста.
+type LineRange = {
+	start: { line: number; ch: number };
+	end: { line: number; ch: number };
+	content: string;
+};
 
-    this.addCommand({
-      id: "shortcut-exclamation-mark",
-      name: "Shortcut for ! symbol",
-      callback: () => this.shortcutExclamationMark(),
-      hotkeys: [
-        {
-          modifiers: ["Alt"],
-          key: "1",
-        },
-      ],
-    });
+// Описание простой текстовой команды.
+//
+// insert:
+//   текст, который вставляется, если ничего не выделено.
+//
+// wrapWith:
+//   пара opening/closing, которая используется, если текст выделен.
+//
+// hotkeys:
+//   необязательные default hotkeys для команды.
+type TextCommandDefinition = {
+	id: string;
+	name: string;
+	insert: string;
+	wrapWith?: { opening: string; closing: string };
+	hotkeys?: { modifiers: string[]; key: string }[];
+};
 
-    this.addCommand({
-      id: "shortcut-At",
-      name: "Shortcut for @ symbol",
-      callback: () => this.shortcutAt(),
-      hotkeys: [
-        {
-          modifiers: ["Alt"],
-          key: "2",
-        },
-      ],
-    });
+const SIMPLE_TEXT_COMMANDS: TextCommandDefinition[] = [
+	{ id: "insert-exclamation-mark", name: "Insert !", insert: "!" },
+	{ id: "insert-at-sign", name: "Insert @", insert: "@" },
+	{ id: "insert-hash-sign", name: "Insert #", insert: "#" },
+	{ id: "insert-dollar-sign", name: "Insert $", insert: "$" },
+	{ id: "insert-percent-sign", name: "Insert %", insert: "%" },
+	{ id: "insert-caret-sign", name: "Insert ^", insert: "^" },
+	{ id: "insert-ampersand", name: "Insert &", insert: "&" },
+	{ id: "insert-right-angle-bracket", name: "Insert >", insert: ">" },
+	{ id: "insert-right-square-bracket", name: "Insert ]", insert: "]" },
+	{ id: "insert-right-curly-bracket", name: "Insert }", insert: "}" },
+	{ id: "insert-vertical-line", name: "Insert |", insert: "|" },
+	{ id: "insert-left-angle-bracket", name: "Insert <", insert: "<" },
+	{ id: "insert-en-dash", name: "Insert –", insert: "–" },
+	{ id: "insert-em-dash", name: "Insert —", insert: "—" },
+	{
+		id: "wrap-selection-with-angle-brackets",
+		name: "Wrap selection with <>",
+		insert: "<",
+		wrapWith: { opening: "<", closing: ">" },
+	},
+	{
+		id: "insert-or-wrap-double-brackets",
+		name: "Insert [ or wrap selection with [[ ]]",
+		insert: "[",
+		wrapWith: { opening: "[[", closing: "]]" },
+	},
+	{
+		id: "insert-or-wrap-curly-braces",
+		name: "Insert { or wrap selection with {}",
+		insert: "{",
+		wrapWith: { opening: "{", closing: "}" },
+	},
+];
 
-    this.addCommand({
-      id: "shortcut-hash",
-      name: "Shortcut for # symbol",
-      callback: () => this.shortcutHash(),
-      hotkeys: [
-        {
-          modifiers: ["Alt"],
-          key: "3",
-        },
-      ],
-    });
+export default class ShortcutsExtenderPlugin extends Plugin {
+	onload(): void {
+		this.registerSimpleTextCommands();
+		this.registerAdvancedCommands();
+	}
 
-    this.addCommand({
-      id: "shortcut-dollar",
-      name: "Shortcut for $ symbol",
-      callback: () => this.shortcutDollar(),
-      hotkeys: [
-        {
-          modifiers: ["Alt"],
-          key: "4",
-        },
-      ],
-    });
+	private registerSimpleTextCommands(): void {
+		for (const command of SIMPLE_TEXT_COMMANDS) {
+			this.addCommand({
+				id: command.id,
+				name: command.name,
+				hotkeys: command.hotkeys,
+				editorCallback: (editor) => {
+					if (command.wrapWith && editor.somethingSelected()) {
+						this.wrapSelection(editor, command.wrapWith.opening, command.wrapWith.closing);
+						return;
+					}
 
-    this.addCommand({
-      id: "shortcut-percent",
-      name: "Shortcut for % symbol",
-      callback: () => this.shortcutPercent(),
-      hotkeys: [
-        {
-          modifiers: ["Alt"],
-          key: "5",
-        },
-      ],
-    });
+					editor.replaceSelection(command.insert);
+				},
+			});
+		}
+	}
 
-    this.addCommand({
-      id: "shortcut-circumflex",
-      name: "Shortcut for ^ symbol",
-      callback: () => this.shortcutCircumflex(),
-      hotkeys: [
-        {
-          modifiers: ["Alt"],
-          key: "6",
-        },
-      ],
-    });
+	private registerAdvancedCommands(): void {
+		this.addCommand({
+			id: "insert-inline-code-or-wrap-selection",
+			name: "Insert ` or wrap selection with inline code",
+			editorCallback: (editor) => {
+				if (editor.somethingSelected()) {
+					this.wrapSelection(editor, "`", "`");
+				} else {
+					editor.replaceSelection("`");
+				}
+			},
+		});
 
-    this.addCommand({
-      id: "shortcut-ampersand",
-      name: "Shortcut for & symbol",
-      callback: () => this.shortcutAmpersand(),
-      hotkeys: [
-        {
-          modifiers: ["Alt"],
-          key: "7",
-        },
-      ],
-    });
+		this.addCommand({
+			id: "insert-python-code-block",
+			name: "Insert Python code block",
+			editorCallback: (editor) => {
+				const selectedText = editor.getSelection();
 
-    this.addCommand({
-      id: "shortcut-less-than",
-      name: "Shortcut for < symbol",
-      callback: () => this.shortcutLessThan(),
-      hotkeys: [
-        {
-          modifiers: ["Alt"],
-          key: "б",
-        },
-        {
-          modifiers: ["Alt"],
-          key: ",",
-        },
-      ],
-    });
+				if (selectedText) {
+					editor.replaceSelection(["```py", selectedText, "```"].join("\n"));
+				} else {
+					editor.replaceSelection("```py\n\n```");
+					const cursor = editor.getCursor();
+					editor.setCursor({ line: cursor.line - 1, ch: 0 });
+				}
+			},
+		});
 
-    this.addCommand({
-      id: "shortcut-greater-than",
-      name: "Shortcut for > symbol",
-      callback: () => this.shortcutGreaterThan(),
-      hotkeys: [
-        {
-          modifiers: ["Alt"],
-          key: "ю",
-        },
-        {
-          modifiers: ["Alt"],
-          key: ".",
-        },
-      ],
-    });
+		this.addCommand({
+			id: "toggle-code-block",
+			name: "Toggle code block",
+			editorCallback: (editor) => this.toggleCodeBlock(editor),
+		});
 
-    this.addCommand({
-      id: "shortcut-left-square-bracket",
-      name: "Shortcut for [ symbol",
-      callback: () => this.shortcutLeftSquareBracket(),
-      hotkeys: [
-        {
-          modifiers: ["Alt"],
-          key: "х",
-        },
-        {
-          modifiers: ["Alt"],
-          key: "[",
-        },
-      ],
-    });
+		this.addCommand({
+			id: "toggle-blockquote-for-lines",
+			name: "Toggle blockquote for selected lines or insert > on empty line",
+			editorCallback: (editor) => this.toggleBlockquoteOrInsert(editor),
+		});
 
-    this.addCommand({
-      id: "shortcut-right-square-bracket",
-      name: "Shortcut for ] symbol",
-      callback: () => this.shortcutRightSquareBracket(),
-      hotkeys: [
-        {
-          modifiers: ["Alt"],
-          key: "ъ",
-        },
-        {
-          modifiers: ["Alt"],
-          key: "]",
-        },
-      ],
-    });
+		this.addCommand({
+			id: "toggle-bullet-list-for-lines",
+			name: "Toggle bullet list for selected lines",
+			editorCallback: (editor) => this.togglePrefixForLines(editor, /^-\s+/, "- "),
+		});
 
-    this.addCommand({
-      id: "shortcut-python-code",
-      name: "Shortcut for .py code fences",
-      callback: () => this.shortcutPyCode(),
-      hotkeys: [
-        {
-          modifiers: ["Alt", "Shift"],
-          key: "ё",
-        },
-        {
-          modifiers: ["Alt", "Shift"],
-          key: "~",
-        },
-      ],
-    });
+		this.addCommand({
+			id: "toggle-selection-case",
+			name: "Toggle selection case",
+			editorCallback: (editor) => this.toggleSelectionCase(editor),
+		});
 
-    this.addCommand({
-      id: "shortcut-code",
-      name: "Shortcut for code fences (`)",
-      callback: () => this.shortcutCodeFences(),
-      hotkeys: [
-        {
-          modifiers: ["Alt"],
-          key: "ё",
-        },
-        {
-          modifiers: ["Alt"],
-          key: "`",
-        },
-      ],
-    });
+		this.addCommand({
+			id: "increase-heading-level",
+			name: "Increase heading level",
+			editorCallback: (editor) => this.changeHeadingLevel(editor, 1),
+		});
 
-    this.addCommand({
-      id: "shortcut-code-block",
-      name: "Shortcut for toggling a code block",
-      callback: () => this.shortcutToggleCodeBlock(),
-      hotkeys: [
-        {
-          modifiers: ["Ctrl"],
-          key: "`",
-        },
-      ],
-    });
+		this.addCommand({
+			id: "decrease-heading-level",
+			name: "Decrease heading level",
+			editorCallback: (editor) => this.changeHeadingLevel(editor, -1),
+		});
 
-    this.addCommand({
-      id: "shortcut-left-curly-bracket",
-      name: "Shortcut for { symbol",
-      callback: () => this.shortcutLeftCurlyBracket(),
-      hotkeys: [
-        {
-          modifiers: ["Alt", "Shift"],
-          key: "х",
-        },
-        {
-          modifiers: ["Alt", "Shift"],
-          key: "{",
-        },
-      ],
-    });
+		this.addCommand({
+			id: "insert-or-wrap-french-quotes",
+			name: "Insert «» or wrap selection with «»",
+			editorCallback: (editor) => this.insertOrWrapFrenchQuotes(editor),
+		});
+	}
 
-    this.addCommand({
-      id: "shortcut-right-curly-bracket",
-      name: "Shortcut for } symbol",
-      callback: () => this.shortcutRightCurlyBracket(),
-      hotkeys: [
-        {
-          modifiers: ["Alt", "Shift"],
-          key: "ъ",
-        },
-        {
-          modifiers: ["Alt", "Shift"],
-          key: "}",
-        },
-      ],
-    });
+	private wrapSelection(editor: Editor, opening: string, closing: string): void {
+		const selectedText = editor.getSelection();
+		editor.replaceSelection(`${opening}${selectedText}${closing}`);
+	}
 
-    this.addCommand({
-      id: "shortcut-Vertical-Line",
-      name: "Shortcut for | symbol",
-      callback: () => this.shortcutVerticalLine(),
-      hotkeys: [
-        {
-          modifiers: ["Alt", "Shift"],
-          key: "|",
-        },
-        {
-          modifiers: ["Alt", "Shift"],
-          key: "\/",
-        },
-      ],
-    });
+	private getLineRange(editor: Editor): LineRange {
+		if (editor.somethingSelected()) {
+			const from = editor.getCursor("from");
+			const to = editor.getCursor("to");
 
-  this.addCommand({
-      id: "shortcut-list-items",
-      name: "Creating list item from text",
-      callback: () => this.shortcutListItems(),
-      hotkeys: [
-        {
-          modifiers: ["Alt"],
-          key: "-",
-        },
-      ],
-    });
+			return {
+				start: { line: from.line, ch: 0 },
+				end: { line: to.line, ch: editor.getLine(to.line).length },
+				content: editor.getRange(
+					{ line: from.line, ch: 0 },
+					{ line: to.line, ch: editor.getLine(to.line).length },
+				),
+			};
+		}
 
-  this.addCommand({
-      id: "heading-1",
-      name: "line into level 1 heading",
-      callback: () => this.shortcutHeaderN(1),
-      hotkeys: [
-        {
-          modifiers: ["Ctrl"],
-          key: "1",
-        },
-      ],
-    });
+		const line = editor.getCursor().line;
+		const content = editor.getLine(line);
 
-  this.addCommand({
-      id: "heading-2",
-      name: "line into level 2 heading",
-      callback: () => this.shortcutHeaderN(2),
-      hotkeys: [
-        {
-          modifiers: ["Ctrl"],
-          key: "2",
-        },
-      ],
-    });
+		return {
+			start: { line, ch: 0 },
+			end: { line, ch: content.length },
+			content,
+		};
+	}
 
-  this.addCommand({
-      id: "heading-3",
-      name: "line into level 3 heading",
-      callback: () => this.shortcutHeaderN(3),
-      hotkeys: [
-        {
-          modifiers: ["Ctrl"],
-          key: "3",
-        },
-      ],
-    });
+	private toggleBlockquoteOrInsert(editor: Editor): void {
+		if (!editor.somethingSelected()) {
+			const cursor = editor.getCursor();
+			const currentLine = editor.getLine(cursor.line);
 
-  this.addCommand({
-      id: "heading-4",
-      name: "line into level 4 heading",
-      callback: () => this.shortcutHeaderN(4),
-      hotkeys: [
-        {
-          modifiers: ["Ctrl"],
-          key: "4",
-        },
-      ],
-    });
+			if (currentLine.trim().length === 0) {
+				editor.replaceSelection("> ");
+				return;
+			}
+		}
 
-  this.addCommand({
-      id: "heading-5",
-      name: "line into level 5 heading",
-      callback: () => this.shortcutHeaderN(5),
-      hotkeys: [
-        {
-          modifiers: ["Ctrl"],
-          key: "5",
-        },
-      ],
-    });
+		this.togglePrefixForLines(editor, /^>\s?/, "> ");
+	}
 
-  this.addCommand({
-      id: "heading-6",
-      name: "line into level 6 heading",
-      callback: () => this.shortcutHeaderN(6),
-      hotkeys: [
-        {
-          modifiers: ["Ctrl"],
-          key: "6",
-        },
-      ],
-    });
+	private togglePrefixForLines(editor: Editor, prefixPattern: RegExp, prefixToAdd: string): void {
+		const range = this.getLineRange(editor);
+		const lines = range.content.split("\n");
+		const nonEmptyLines = lines.filter((line) => line.trim().length > 0);
+		const shouldRemove = nonEmptyLines.length > 0 && nonEmptyLines.every((line) => prefixPattern.test(line));
 
-  this.addCommand({
-      id: "heading-0",
-      name: "clearing of text formatting",
-      callback: () => this.shortcutHeaderN(0),
-      hotkeys: [
-        {
-          modifiers: ["Ctrl"],
-          key: "0",
-        },
-      ],
-    });
-  }
+		const nextLines = lines.map((line) => {
+			if (line.trim().length === 0) {
+				return line;
+			}
 
-  getSelectedText(editor: Editor) {
-  //thanks to user "Argentina Ortega Sáinz" from the Obsidian community for this feature
-  //For a long time I tried to do without such an approach, which resulted in several bugs and the impossibility of fixing them with non-crutches
-    if (editor.somethingSelected()) {
-      let cursorStart = editor.getCursor('from');
-      let cursorEnd = editor.getCursor('to');
-      let content = editor.getRange(
-        { line: cursorStart.line, ch: 0 },
-        { line: cursorEnd.line, ch: editor.getLine(cursorEnd.line).length }
-      );
-      return {
-        start: { line: cursorStart.line, ch: 0 },
-        end: {
-          line: cursorEnd.line,
-          ch: editor.getLine(cursorEnd.line).length,
-        },
-        content: content,
-      };
-    } else {
-      // Toggle the todo in the line
-      var lineNr = editor.getCursor().line;
-      var contents = editor.getDoc().getLine(lineNr);
-      let cursorStart = {
-        line: lineNr,
-        ch: 0,
-      };
-      let cursorEnd = {
-        line: lineNr,
-        ch: contents.length,
-      };
-      let content = editor.getRange(cursorStart, cursorEnd);
-      return { start: cursorStart, end: cursorEnd, content: content };
-    }
-  }
+			if (shouldRemove) {
+				return line.replace(prefixPattern, "");
+			}
 
-  shortcutExclamationMark(): void {
-    let editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-    if (editor == null) {
-      return;
-    }
-    let selectedText = editor.somethingSelected()
-      ? editor.getSelection()
-      : false;
-    editor.replaceSelection(`\!`);
-  }
+			return `${prefixToAdd}${line}`;
+		});
 
-  shortcutAt(): void {
-    let editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-    if (editor == null) {
-      return;
-    }
-    let selectedText = editor.somethingSelected()
-      ? editor.getSelection()
-      : false;
-    editor.replaceSelection(`@`);
-  }
+		editor.replaceRange(nextLines.join("\n"), range.start, range.end);
+	}
 
-  shortcutHash(): void {
-    let editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-    if (editor == null) {
-      return;
-    }
-    let selectedText = editor.somethingSelected()
-      ? editor.getSelection()
-      : false;
-    editor.replaceSelection(`#`);
-  }
+	private toggleCodeBlock(editor: Editor): void {
+		const selectedText = editor.getSelection();
 
-  shortcutDollar(): void {
-    let editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-    if (editor == null) {
-      return;
-    }
-    let selectedText = editor.somethingSelected()
-      ? editor.getSelection()
-      : false;
-    editor.replaceSelection(`$`);
-  }
+		if (!selectedText) {
+			const cursor = editor.getCursor();
+			editor.replaceSelection("```\n\n```");
+			editor.setCursor({ line: cursor.line + 1, ch: 0 });
+			return;
+		}
 
-  shortcutPercent(): void {
-    let editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-    if (editor == null) {
-      return;
-    }
-    let selectedText = editor.somethingSelected()
-      ? editor.getSelection()
-      : false;
-    editor.replaceSelection(`\%`);
-  }
+		const trimmed = selectedText.trim();
+		const isWrapped = trimmed.startsWith("```") && trimmed.endsWith("```");
 
-  shortcutCircumflex(): void {
-    let editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-    if (editor == null) {
-      return;
-    }
-    let selectedText = editor.somethingSelected()
-      ? editor.getSelection()
-      : false;
-    editor.replaceSelection(`\^`);
-  }
+		if (isWrapped) {
+			const withoutStartFence = trimmed.replace(/^```[a-zA-Z0-9_-]*\n?/, "");
+			const unwrapped = withoutStartFence.replace(/\n?```$/, "");
+			editor.replaceSelection(unwrapped);
+			return;
+		}
 
-  shortcutAmpersand(): void {
-    let editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-    if (editor == null) {
-      return;
-    }
-    let selectedText = editor.somethingSelected()
-      ? editor.getSelection()
-      : false;
-    editor.replaceSelection(`\&`);
-  }
+		editor.replaceSelection(["```", selectedText, "```"].join("\n"));
+	}
 
-  shortcutLessThan(): void {
-    let editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-    if (editor == null) {
-      return;
-    }
-    let selectedText = editor.somethingSelected()
-      ? editor.getSelection()
-      : false;
-    if (selectedText) {
-      editor.replaceSelection(`<${selectedText}>`);
-    } else editor.replaceSelection(`<`);
-  }
+	private toggleSelectionCase(editor: Editor): void {
+		const selectedText = editor.getSelection();
 
-  shortcutGreaterThan(): void {
-		let activeLeaf: any = this.app.workspace.activeLeaf;
-    let editor = activeLeaf.view.sourceMode.cmEditor;
-    let selectedText = this.getSelectedText(editor);
+		if (!selectedText) {
+			return;
+		}
 
-    let resultText = "> " + selectedText.content.split('\n').join("\n> ");
-		editor.replaceRange(resultText, selectedText.start, selectedText.end);
-  }
+		const hasLowercase = selectedText !== selectedText.toUpperCase();
+		const nextText = hasLowercase ? selectedText.toUpperCase() : selectedText.toLowerCase();
+		editor.replaceSelection(nextText);
+	}
 
-  shortcutLeftSquareBracket(): void {
-    let editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-    if (editor == null) {
-      return;
-    }
-    let selectedText = editor.somethingSelected()
-      ? editor.getSelection()
-      : false;
-    if (selectedText) {
-      editor.replaceSelection(`[[${selectedText}]]`);
-    } else editor.replaceSelection(`[`);
-  }
+	// Меняет уровень markdown-heading в текущей строке или во всём выделенном блоке.
+	//
+	// Актуальная логика такая:
+	// - если строка начинается со спецсимвола, markdown-маркера списка/чекбокса
+	//   или с номера списка (например `1. ` / `1) `), она не меняется;
+	// - если строка пустая или начинается с обычного текста,
+	//   Increase heading level делает heading 6 уровня,
+	//   а Decrease heading level делает heading 1 уровня;
+	// - если строка уже является heading, то Increase heading level
+	//   уменьшает количество # (###### -> ##### -> ... -> # -> обычный текст);
+	// - Decrease heading level работает наоборот и увеличивает количество #
+	//   (# -> ## -> ... -> ###### -> обычный текст).
+	private changeHeadingLevel(editor: Editor, delta: 1 | -1): void {
+		const range = this.getLineRange(editor);
+		const lines = range.content.split("\n");
+		const nextLines = lines.map((line) => this.changeHeadingLevelForLine(line, delta));
+		editor.replaceRange(nextLines.join("\n"), range.start, range.end);
+	}
 
-  shortcutRightSquareBracket(): void {
-    let editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-    if (editor == null) {
-      return;
-    }
-    let selectedText = editor.somethingSelected()
-      ? editor.getSelection()
-      : false;
-    editor.replaceSelection(`]`);
-  }
+	private changeHeadingLevelForLine(line: string, delta: 1 | -1): string {
+		const headingMatch = line.match(/^(\s*)(#{1,6})\s+(.*)$/);
 
-  shortcutPyCode(): void {
-    let editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-    if (editor == null) {
-      return;
-    }
-    let selectedText = editor.somethingSelected()
-      ? editor.getSelection()
-      : false;
-    if (selectedText) {
-      editor.replaceSelection(`\`\`\`py\n${selectedText}\n\`\`\``);
-    } else editor.replaceSelection(`\``);
-  }
+		if (headingMatch) {
+			const [, indent, hashes, content] = headingMatch;
+			const currentLevel = hashes.length;
 
-  shortcutCodeFences(): void {
-    let editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-    if (editor == null) {
-      return;
-    }
-    let selectedText = editor.somethingSelected()
-      ? editor.getSelection()
-      : false;
-    if (selectedText) {
-      editor.replaceSelection(`\`${selectedText}\``);
-    } else editor.replaceSelection(`\``);
-  }
+			// Increase heading level = визуально сделать заголовок более "крупным",
+			// то есть уменьшить глубину и УМЕНЬШИТЬ количество #.
+			if (delta === 1) {
+				if (currentLevel === 1) {
+					return `${indent}${content}`;
+				}
 
-  shortcutToggleCodeBlock(): void {
-    let editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-    if (editor == null) {
-      return;
-    }
-    let selectedText = editor.somethingSelected() ? editor.getSelection() : "";
-    let startCursor = editor.getCursor('from');
-    let firstLine = editor.getLine(startCursor.line);
-    let endCursor = editor.getCursor('to');
-    let lastLine = editor.getLine(endCursor.line);
+				return `${indent}${"#".repeat(currentLevel - 1)} ${content}`;
+			}
 
-    // If the selections starts with ```, then we should remove the code block.
-    let isCodeBlock = firstLine.startsWith("```") && lastLine.endsWith("```") 
-                        && selectedText.length >= 6;
-    if (isCodeBlock) {
-      // Position of first non-whitespace
-      let textStartPos = selectedText.search("\\s\\S") + 1;
-      if (textStartPos < 0) {
-        textStartPos = 3;
-      }
+			// Decrease heading level = сделать заголовок более "глубоким",
+			// то есть увеличить глубину и ДОБАВИТЬ #.
+			// Особый случай: H6 по следующему нажатию превращается в обычный текст.
+			if (currentLevel === 6) {
+				return `${indent}${content}`;
+			}
 
-      // Remove the code block formatting.
-      let endPos = selectedText.length - 3;
-      let innerText = selectedText.substring(textStartPos, endPos)
-      editor.replaceSelection(innerText)
-    } else {
-      editor.replaceSelection(`\`\`\`\n${selectedText}\n\`\`\``);
-      startCursor.ch = 3; // Move cursor after ```
-      editor.setCursor(startCursor);
-    }
-  }
+			return `${indent}${"#".repeat(currentLevel + 1)} ${content}`;
+		}
 
-  shortcutRightCurlyBracket(): void {
-    let editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-    if (editor == null) {
-      return;
-    }
-    let selectedText = editor.somethingSelected()
-      ? editor.getSelection()
-      : false;
-    editor.replaceSelection(`}`);
-  }
+		const blankOrPlainTextMatch = line.match(/^(\s*)(.*)$/);
+		if (!blankOrPlainTextMatch) {
+			return line;
+		}
 
-  shortcutLeftCurlyBracket(): void {
-    let editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-    if (editor == null) {
-      return;
-    }
-    let selectedText = editor.somethingSelected()
-      ? editor.getSelection()
-      : false;
-    if (selectedText) {
-      editor.replaceSelection(`\{${selectedText}\}`);
-    } else editor.replaceSelection(`\{`);
-  }
+		const [, indent, content] = blankOrPlainTextMatch;
+		const trimmed = content.trim();
 
-  shortcutVerticalLine(): void {
-    let editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-    if (editor == null) {
-      return;
-    }
-    let selectedText = editor.somethingSelected()
-      ? editor.getSelection()
-      : false;
-    editor.replaceSelection(`|`);
-  }
+		if (trimmed.length === 0) {
+			return delta === 1 ? `${indent}###### ` : `${indent}# `;
+		}
 
-  shortcutListItems(): void {
-    let editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-    if (editor == null) {
-      return;
-    }
-    let selectedText = this.getSelectedText(editor);
+		// Не создаём heading поверх markdown-списков и checkbox-строк.
+		// Сюда же относим строки, начинающиеся с других спецсимволов.
+		if (this.isProtectedNonHeadingLine(trimmed)) {
+			return line;
+		}
 
-    let resultText = "- " + selectedText.content.split('\n').join("\n- ");
+		return delta === 1 ? `${indent}###### ${trimmed}` : `${indent}# ${trimmed}`;
+	}
 
-    let resultTextCheck = resultText;
-    while (resultTextCheck.search("- - ") >= 0) {
-      resultTextCheck = resultTextCheck.replace("- - ", "	- ");
-    }
-    while (resultTextCheck.search("- 		") >= 0) {
-      resultTextCheck = resultTextCheck.replace("- 		", "	- 	");
-    }
-    while (resultTextCheck.search("- 	- ") >= 0) {
-      resultTextCheck = resultTextCheck.replace("- 	- ", "		- ");
-    }
-    editor.replaceRange(resultTextCheck, selectedText.start, selectedText.end);
-  }
+	// Возвращает true для строк, которые нельзя автоматически превращать в heading.
+	//
+	// Защищаем:
+	// - bullet list: `- item`, `* item`, `+ item`;
+	// - checkbox: `- [ ] task`, `- [x] task`;
+	// - ordered list: `1. item`, `2) item`;
+	// - строки, начинающиеся с других спецсимволов.
+	//
+	// Но обычные строки, начинающиеся с цифр ВНУТРИ текста, не блокируем.
+	// Например `2025 report` можно превратить в heading, а `1. report` — нет.
+	private isProtectedNonHeadingLine(trimmedLine: string): boolean {
+		if (/^[-*+]\s+\[[ xX]\]\s+/.test(trimmedLine)) {
+			return true;
+		}
 
-  removeFormatSymbolsFromStr(line: string): string {
-    let editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-    if (editor == null) {
-      return;
-    }
+		if (/^[-*+]\s+/.test(trimmedLine)) {
+			return true;
+		}
 
-    // Remove symbols we don't want at the beginning of the line.
-    while (line.substring(0,2) == "##") {
-      line = line.replace("##", "#");
-    }
-    while (line.substring(0,2) == "# ") {
-      line = line.substr(2);
-    }
-    while (line.substring(0,2) == "> ") {
-      line = line.substr(2);
-    }
-    while (line.substring(0,2) == "		") {
-      line = line.replace("		", "	");
-    }
-    while (line.substring(0,3) == "	- ") {
-      line = line.substr(3);
-    }
-    while (line.substring(0,2) == "- ") {
-      line = line.substr(2);
-    }
-    var re_digits = /^\d\.\s/;
-    line = line.replace(re_digits, "");
+		if (/^\d+[.)]\s+/.test(trimmedLine)) {
+			return true;
+		}
 
-    return line;
-  }
+		return /^[^\p{L}\p{N}]/u.test(trimmedLine);
+	}
 
-  addHeadingToStr(line: string, headingLevel: number): string {
-    let space = " ";
-    if (headingLevel == 0) {
-      space = "";
-    }
+	private insertOrWrapFrenchQuotes(editor: Editor): void {
+		if (editor.somethingSelected()) {
+			this.wrapSelection(editor, "«", "»");
+			return;
+		}
 
-    return "#".repeat(headingLevel) + space + line;
-  }
-
-  shortcutHeaderN(headingLevel: number): void {
-    let editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-    if (editor == null) {
-      return;
-    }
-
-    // Apply heading level to each line.
-    let selections = editor.listSelections();
-    for (let i = 0; i < selections.length; i++) {
-      this.shortcutHeaderNSingleSelection(headingLevel, selections[i])
-    }
-
-    // setSelections is called to preserve the location of each cursor relative
-    // to the end of the line.
-    editor.setSelections(selections);
-  }
-
-  // shortcutHeaderNSingleSelection sets all lines in the selection to the 
-  // desired heading level. selection is also updated to maintain the cursor
-  // position relative to the end of the line.
-  shortcutHeaderNSingleSelection(headingLevel: number, selection: EditorSelection) {
-    let editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-    if (editor == null) {
-      return;
-    }
-
-    // Save anchor/head distance from end.
-    let anchorDistFromEnd = editor.getLine(selection.anchor.line).length - selection.anchor.ch
-    let headDistFromEnd = editor.getLine(selection.head.line).length - selection.head.ch
-
-    // Get from and to line numbers.
-    let fromLine = selection.anchor.line;
-    let toLine = selection.head.line;
-    let increment = fromLine <= toLine ? 1 : -1;
-    // For each line in the selection, set the heading level.
-    let lineNum = fromLine;
-    while (true) {
-      // Update the current line.
-      let line = editor.getLine(lineNum);
-      line = this.removeFormatSymbolsFromStr(line);
-      line = this.addHeadingToStr(line, headingLevel);
-      editor.setLine(lineNum, line);
-      
-      // Move to next line if not done.
-      if (lineNum == toLine) {
-        break;
-      }
-      lineNum += increment;
-    }
-
-    // Preserve anchor/head locations relative to line end.
-    selection.anchor.ch = editor.getLine(selection.anchor.line).length - anchorDistFromEnd;
-    selection.head.ch = editor.getLine(selection.head.line).length - headDistFromEnd;
-  }
+		const cursor = editor.getCursor();
+		editor.replaceSelection("«»");
+		editor.setCursor({ line: cursor.line, ch: cursor.ch + 1 });
+	}
 }

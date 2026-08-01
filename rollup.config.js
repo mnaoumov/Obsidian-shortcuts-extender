@@ -1,15 +1,19 @@
-import typescript from "@rollup/plugin-typescript";
-import { nodeResolve } from "@rollup/plugin-node-resolve";
 import commonjs from "@rollup/plugin-commonjs";
+import { nodeResolve } from "@rollup/plugin-node-resolve";
+import typescript from "@rollup/plugin-typescript";
 
 export default {
   input: "main.ts",
   output: {
-    dir: ".",
-    sourcemap: "inline",
+    file: "main.js",
     format: "cjs",
-    exports: "default",
+    sourcemap: "inline",
+    exports: "default"
   },
   external: ["obsidian"],
-  plugins: [typescript(), nodeResolve({ browser: true }), commonjs()],
+  plugins: [
+    nodeResolve({ browser: true }),
+    commonjs(),
+    typescript({ tsconfig: "./tsconfig.json" })
+  ]
 };
