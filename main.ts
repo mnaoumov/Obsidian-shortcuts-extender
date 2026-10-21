@@ -1,4 +1,15 @@
-import { App, Command, Editor, Hotkey, Notice, Platform, Plugin, PluginSettingTab, Setting } from "obsidian";
+import {
+	App,
+	Command,
+	Editor,
+	Hotkey,
+	Notice,
+	Platform,
+	Plugin,
+	PluginSettingTab,
+	Setting,
+	SettingDefinitionItem,
+} from "obsidian";
 
 // Полный диапазон строк, с которым работают многострочные команды.
 //
@@ -563,26 +574,45 @@ export default class ShortcutsExtenderPlugin extends Plugin {
 	}
 }
 
+const ASSIGN_DEFAULT_HOTKEYS_NAME = "Assign default hotkeys";
+const ASSIGN_DEFAULT_HOTKEYS_DESC =
+	"Assigns the hotkeys that version 2.x set by default, such as Alt+1..7 for symbols and Ctrl+0..6 for headings. " +
+	"Commands that already have a hotkey and key combinations already used by another command are skipped.";
+
 class ShortcutsExtenderSettingTab extends PluginSettingTab {
 	constructor(app: App, private readonly plugin: ShortcutsExtenderPlugin) {
 		super(app, plugin);
 	}
 
+	// Obsidian 1.13+ строит вкладку по этим определениям (и индексирует их для поиска
+	// в настройках), а display() при непустом массиве не вызывает.
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		return [
+			{
+				name: ASSIGN_DEFAULT_HOTKEYS_NAME,
+				desc: ASSIGN_DEFAULT_HOTKEYS_DESC,
+				render: (setting) => this.addAssignDefaultHotkeysButton(setting),
+			},
+		];
+	}
+
+	// Только для Obsidian ниже 1.13.0, где getSettingDefinitions() ещё нет
+	// (minAppVersion плагина — 1.5.0). Начиная с 1.13.0 display() deprecated.
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		new Setting(containerEl)
-			.setName("Assign default hotkeys")
-			.setDesc(
-				"Assigns the hotkeys that version 2.x set by default, such as Alt+1..7 for symbols and Ctrl+0..6 for headings. " +
-					"Commands that already have a hotkey and key combinations already used by another command are skipped.",
-			)
-			.addButton((button) =>
-				button
-					.setButtonText("Assign default hotkeys")
-					.setCta()
-					.onClick(() => this.plugin.assignLegacyDefaultHotkeys()),
-			);
+		this.addAssignDefaultHotkeysButton(
+			new Setting(containerEl).setName(ASSIGN_DEFAULT_HOTKEYS_NAME).setDesc(ASSIGN_DEFAULT_HOTKEYS_DESC),
+		);
+	}
+
+	private addAssignDefaultHotkeysButton(setting: Setting): void {
+		setting.addButton((button) =>
+			button
+				.setButtonText(ASSIGN_DEFAULT_HOTKEYS_NAME)
+				.setCta()
+				.onClick(() => this.plugin.assignLegacyDefaultHotkeys()),
+		);
 	}
 }
