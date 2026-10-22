@@ -7,6 +7,7 @@ import {
 	Platform,
 	Plugin,
 	PluginSettingTab,
+	requireApiVersion,
 	Setting,
 	SettingDefinitionItem,
 } from "obsidian";
@@ -596,9 +597,15 @@ class ShortcutsExtenderSettingTab extends PluginSettingTab {
 		];
 	}
 
-	// Только для Obsidian ниже 1.13.0, где getSettingDefinitions() ещё нет
-	// (minAppVersion плагина — 1.5.0). Начиная с 1.13.0 display() deprecated.
+	// Начиная с 1.13.0 display() deprecated.
 	display(): void {
+		if (requireApiVersion("1.13.0")) {
+			// 1.13+ строит вкладку по getSettingDefinitions().
+			super.display();
+			return;
+		}
+
+		// Запасной вариант для Obsidian ниже 1.13.0 (minAppVersion плагина — 1.5.0).
 		const { containerEl } = this;
 		containerEl.empty();
 
